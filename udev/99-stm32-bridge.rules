@@ -1,0 +1,38 @@
+# /etc/udev/rules.d/99-stm32-bridge.rules
+#
+# 作用：把「内核按枚举顺序随便取的 /dev/ttyUSB0」固定成一个身份稳定的别名
+#       /dev/stm32_bridge
+# 解决的问题：换 USB 口、插第二块串口设备、先插板子后插别的东西 → 名字漂移
+#
+# ── 安装步骤 ─────────────────────────────────────────────────
+#   1) 查 VID:PID：
+#        lsusb
+#        # 例: Bus 001 Device 005: ID 1a86:7523 QinHeng Electronics CH340
+#        #                              ^^^^ ^^^^
+#   2) 改下面 ATTRS 里的值（要和你 lsusb 看到的完全一致）
+#   3) sudo cp 99-stm32-bridge.rules /etc/udev/rules.d/
+#   4) sudo udevadm control --reload-rules && sudo udevadm trigger
+#   5) 拔插一次，验证： ls -l /dev/stm32_bridge
+#
+# ── 常见 VID:PID ─────────────────────────────────────────────
+#   CH340/CH341   : 1a86:7523
+#   CP2102/CP2104 : 10c4:ea60
+#   FT232         : 0403:6001
+#   STM32 自带 VCP: 0483:5740
+#   PL2303        : 067b:2303
+#
+# ── 注意 ─────────────────────────────────────────────────────
+#   · 同一型号的芯片，VID:PID 是一样的 → 插两块 CH340 会抢同一个别名。
+#     要精确到"这一块板子"，用序列号再收一道：
+#       udevadm info -a -n /dev/ttyUSB0 | grep -E 'ATTRS\{(serial|idVendor|idProduct)\}'
+#     然后加一行 ATTRS{serial}=="A50285BI"
+#   · MODE="0660" + GROUP="dialout" 比 MODE="0666" 稳；
+#     单人机器上 0666 也能用，但别在多人机器上这么写。
+#   · 如果 Ubuntu 自带的 brltty 抢占 CH340（dmesg 里能看到
+#     "ch341-uart ... disconnected from ttyUSB0"），先关掉它：
+#       sudo systemctl stop  brltty-udev.service brltty.service
+#       sudo systemctl mask  brltty-udev.service
+# ------------------------------------------------------------
+
+SUBSYSTEM=="tty", ATTRS{idVendor}=="1a86", ATTRS{idProduct}=="7523", \
+  SYMLINK+="stm32_bridge", GROUP="dialout", MODE="0660"
